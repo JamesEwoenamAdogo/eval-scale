@@ -1,21 +1,8 @@
-import Navbar from "@/components/Navbar";
-import Hero from "@/components/Hero";
-import Features from "@/components/Features";
-import HowItWorks from "@/components/HowItWorks";
-import Disclaimer from "@/components/Disclaimer";
-import Footer from "@/components/Footer";
+import { Navigate } from "react-router-dom";
+import { isAdminLoggedIn } from "@/lib/adminAuth";
+import AdminDashboard from "./AdminDashboard";
 
-const Index = () => {
-  return (
-    <div className="min-h-screen">
-      <Navbar />
-      <Hero />
-      <Features />
-      <HowItWorks />
-      <Disclaimer />
-      <Footer />
-    </div>
-  );
-};
-
-export default Index;
+export default function Index() {
+  if (!isAdminLoggedIn()) return <Navigate to="/login" replace />;
+  return <AdminDashboard />;
+}
