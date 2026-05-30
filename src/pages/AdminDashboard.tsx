@@ -22,11 +22,13 @@ import {
   Eye,
   Building2,
   Settings as SettingsIcon,
+  LayoutDashboard,
+  CreditCard,
+  ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +59,20 @@ import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarRail,
+  SidebarInset,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
 
 import { adminLogout, getAdminEmail } from "@/lib/adminAuth";
 import {
@@ -68,6 +84,7 @@ import {
 } from "@/lib/mockData";
 
 type FilterPreset = "today" | "week" | "month" | "custom";
+type View = "overview" | "customers" | "payments" | "settings";
 
 function useDateRange() {
   const [preset, setPreset] = useState<FilterPreset>("month");
@@ -90,9 +107,17 @@ function inRange(d: Date, from: Date, to: Date) {
   return (isAfter(d, from) || isEqual(d, from)) && (isBefore(d, to) || isEqual(d, to));
 }
 
+const navItems: { id: View; label: string; icon: React.ElementType }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "customers", label: "Customers", icon: Users },
+  { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "settings", label: "Settings", icon: SettingsIcon },
+];
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const email = getAdminEmail();
+  const [view, setView] = useState<View>("overview");
 
   const dr = useDateRange();
   const { range } = dr;
@@ -161,349 +186,378 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Shield className="h-5 w-5 text-primary" />
+    <SidebarProvider>
+      <Sidebar collapsible="icon" className="border-r">
+        <SidebarHeader>
+          <div className="flex items-center gap-2 px-2 py-1">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Shield className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <h1 className="font-bold leading-tight">Superadmin</h1>
-              <p className="text-xs text-muted-foreground">{email}</p>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm font-bold truncate">Superadmin</span>
+              <span className="text-[10px] text-muted-foreground truncate">{email}</span>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign out
-          </Button>
-        </div>
-      </header>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarMenu>
+            {navItems.map((item) => (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={view === item.id}
+                  onClick={() => setView(item.id)}
+                  tooltip={item.label}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                  {view === item.id && (
+                    <ChevronRight className="ml-auto h-3 w-3 opacity-50" />
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarContent>
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout} tooltip="Sign out">
+                <LogOut className="h-4 w-4" />
+                <span>Sign out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full max-w-xl grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="customers">Customers</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+      <SidebarInset>
+        {/* Top bar */}
+        <header className="h-14 border-b flex items-center px-4 gap-3 bg-card sticky top-0 z-10">
+          <SidebarTrigger />
+          <div className="flex-1" />
+          <span className="text-xs text-muted-foreground hidden sm:inline">{email}</span>
+        </header>
 
-          {/* OVERVIEW */}
-          <TabsContent value="overview" className="space-y-6">
-            <FilterBar dr={dr} />
+        <main className="p-4 md:p-6">
+          {view === "overview" && (
+            <div className="space-y-6">
+              <FilterBar dr={dr} />
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <MetricCard
-                icon={<Users className="h-5 w-5" />}
-                label="New signups"
-                value={filteredSignups.length.toString()}
-                hint={`In ${dr.preset === "custom" ? "selected range" : dr.preset}`}
-              />
-              <MetricCard
-                icon={<DollarSign className="h-5 w-5" />}
-                label="Restaurant revenue"
-                value={`$${totalRevenue.toLocaleString()}`}
-                hint={`${filteredTxns.length} transactions`}
-              />
-              <MetricCard
-                icon={<Percent className="h-5 w-5" />}
-                label={`Your commission (${commissionPct}%)`}
-                value={`$${totalCommission.toLocaleString()}`}
-                hint="From filtered period"
-              />
-            </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <MetricCard
+                  icon={<Users className="h-5 w-5" />}
+                  label="New signups"
+                  value={filteredSignups.length.toString()}
+                  hint={`In ${dr.preset === "custom" ? "selected range" : dr.preset}`}
+                />
+                <MetricCard
+                  icon={<DollarSign className="h-5 w-5" />}
+                  label="Restaurant revenue"
+                  value={`$${totalRevenue.toLocaleString()}`}
+                  hint={`${filteredTxns.length} transactions`}
+                />
+                <MetricCard
+                  icon={<Percent className="h-5 w-5" />}
+                  label={`Your commission (${commissionPct}%)`}
+                  value={`$${totalCommission.toLocaleString()}`}
+                  hint="From filtered period"
+                />
+              </div>
 
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold">Client signups per month</h3>
-                  <p className="text-sm text-muted-foreground">Last 12 months</p>
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold">Client signups per month</h3>
+                    <p className="text-sm text-muted-foreground">Last 12 months</p>
+                  </div>
                 </div>
-              </div>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="signupGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="signups"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      fill="url(#signupGrad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* CUSTOMERS */}
-          <TabsContent value="customers" className="space-y-4">
-            <Card className="p-4 md:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold">All customers</h3>
-                  <p className="text-sm text-muted-foreground">{customers.length} total</p>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="signupGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: 8,
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="signups"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        fill="url(#signupGrad)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="hidden md:table-cell">Restaurant</TableHead>
-                      <TableHead className="hidden md:table-cell">Joined</TableHead>
-                      <TableHead>Spent</TableHead>
-                      <TableHead>Payout</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customers.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
-                        <TableCell className="hidden md:table-cell">{format(c.joinedAt, "MMM d, yyyy")}</TableCell>
-                        <TableCell>${c.totalSpent}</TableCell>
-                        <TableCell>
-                          {c.payout ? (
-                            <Badge variant="secondary">{c.payout.type === "bank" ? "Bank" : "MoMo"}</Badge>
-                          ) : (
-                            <Badge variant="outline">Not set</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => setViewCustomer(c)}>
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setPayoutCustomer(c)}>
-                              <Plus className="h-4 w-4 mr-1" /> Payout
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* PAYMENTS */}
-          <TabsContent value="payments" className="space-y-4">
-            <Card className="p-4 md:p-6">
-              <div className="mb-4">
-                <h3 className="font-semibold">Customer shares</h3>
-                <p className="text-sm text-muted-foreground">
-                  Send each customer their share of restaurant revenue.
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Customer</TableHead>
-                      <TableHead className="hidden md:table-cell">Restaurant</TableHead>
-                      <TableHead>Pending share</TableHead>
-                      <TableHead>Account</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customers.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
-                        <TableCell className="font-semibold">${c.pendingShare}</TableCell>
-                        <TableCell>
-                          {c.payout ? (
-                            <span className="text-xs text-muted-foreground">
-                              {c.payout.provider} • {c.payout.accountNumber.slice(-4)}
-                            </span>
-                          ) : (
-                            <Badge variant="outline">Missing</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            disabled={!c.payout}
-                            onClick={() => {
-                              setSendShareCustomer(c);
-                              setEditPayout(c.payout ? { ...c.payout } : null);
-                            }}
-                          >
-                            <Send className="h-4 w-4 mr-1" /> Send share
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* SETTINGS */}
-          <TabsContent value="settings" className="space-y-4">
-            <Card className="p-6 space-y-4">
-              <div>
-                <h3 className="font-semibold flex items-center gap-2">
-                  <SettingsIcon className="h-4 w-4" /> Commission
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Percentage of restaurant revenue collected as commission.
-                </p>
-              </div>
-              <div className="flex items-end gap-3 max-w-sm">
-                <div className="flex-1 space-y-1">
-                  <Label>Commission %</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={commissionPct}
-                    onChange={(e) => setCommissionPct(Number(e.target.value))}
-                  />
-                </div>
-                <Button onClick={() => toast.success("Commission updated")}>Save</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6 space-y-4">
-              <div>
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Building2 className="h-4 w-4" /> Business recipient account
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Where your commission from all restaurants will be sent.
-                </p>
-              </div>
-              <AccountForm value={businessAccount} onChange={setBusinessAccount} />
-              <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
-                <div className="flex-1 min-w-[200px]">
-                  <p className="text-sm text-muted-foreground">Commission available</p>
-                  <p className="text-2xl font-bold">${totalCommission.toLocaleString()}</p>
-                </div>
-                <Button onClick={() => setSendCommissionOpen(true)}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send commission to business account
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </main>
-
-      {/* View customer dialog */}
-      <Dialog open={!!viewCustomer} onOpenChange={(o) => !o && setViewCustomer(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{viewCustomer?.name}</DialogTitle>
-            <DialogDescription>Customer details</DialogDescription>
-          </DialogHeader>
-          {viewCustomer && (
-            <div className="space-y-2 text-sm">
-              <Row label="ID" value={viewCustomer.id} />
-              <Row label="Email" value={viewCustomer.email} />
-              <Row label="Phone" value={viewCustomer.phone} />
-              <Row label="Restaurant" value={viewCustomer.restaurant} />
-              <Row label="Joined" value={format(viewCustomer.joinedAt, "PPP")} />
-              <Row label="Total spent" value={`$${viewCustomer.totalSpent}`} />
-              <Row label="Pending share" value={`$${viewCustomer.pendingShare}`} />
-              <Row
-                label="Payout"
-                value={
-                  viewCustomer.payout
-                    ? `${viewCustomer.payout.provider} • ${viewCustomer.payout.accountNumber}`
-                    : "Not set"
-                }
-              />
+              </Card>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
 
-      {/* Add payout dialog */}
-      <PayoutDialog
-        open={!!payoutCustomer}
-        title={`Add payout account for ${payoutCustomer?.name ?? ""}`}
-        initial={payoutCustomer?.payout}
-        onClose={() => setPayoutCustomer(null)}
-        onSave={handleAddPayout}
-      />
-
-      {/* Send share confirm dialog */}
-      <Dialog
-        open={!!sendShareCustomer}
-        onOpenChange={(o) => {
-          if (!o) {
-            setSendShareCustomer(null);
-            setEditPayout(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm payout</DialogTitle>
-            <DialogDescription>
-              Sending <b>${sendShareCustomer?.pendingShare}</b> to {sendShareCustomer?.name}.
-              Review and edit the account details if needed.
-            </DialogDescription>
-          </DialogHeader>
-          {editPayout && (
-            <AccountForm value={editPayout} onChange={setEditPayout} />
+          {view === "customers" && (
+            <div className="space-y-4">
+              <Card className="p-4 md:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold">All customers</h3>
+                    <p className="text-sm text-muted-foreground">{customers.length} total</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="hidden md:table-cell">Restaurant</TableHead>
+                        <TableHead className="hidden md:table-cell">Joined</TableHead>
+                        <TableHead>Spent</TableHead>
+                        <TableHead>Payout</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customers.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
+                          <TableCell className="hidden md:table-cell">{format(c.joinedAt, "MMM d, yyyy")}</TableCell>
+                          <TableCell>${c.totalSpent}</TableCell>
+                          <TableCell>
+                            {c.payout ? (
+                              <Badge variant="secondary">{c.payout.type === "bank" ? "Bank" : "MoMo"}</Badge>
+                            ) : (
+                              <Badge variant="outline">Not set</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="ghost" onClick={() => setViewCustomer(c)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setPayoutCustomer(c)}>
+                                <Plus className="h-4 w-4 mr-1" /> Payout
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            </div>
           )}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSendShareCustomer(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSendShare}>
-              <Send className="h-4 w-4 mr-2" /> Send now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Send commission */}
-      <Dialog open={sendCommissionOpen} onOpenChange={setSendCommissionOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Send commission</DialogTitle>
-            <DialogDescription>
-              Sending <b>${totalCommission}</b> to <b>{businessAccount.accountName}</b> (
-              {businessAccount.provider} • {businessAccount.accountNumber}).
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSendCommissionOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSendCommission}>
-              <Send className="h-4 w-4 mr-2" /> Confirm send
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+          {view === "payments" && (
+            <div className="space-y-4">
+              <Card className="p-4 md:p-6">
+                <div className="mb-4">
+                  <h3 className="font-semibold">Customer shares</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Send each customer their share of restaurant revenue.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="hidden md:table-cell">Restaurant</TableHead>
+                        <TableHead>Pending share</TableHead>
+                        <TableHead>Account</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customers.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
+                          <TableCell className="font-semibold">${c.pendingShare}</TableCell>
+                          <TableCell>
+                            {c.payout ? (
+                              <span className="text-xs text-muted-foreground">
+                                {c.payout.provider} • {c.payout.accountNumber.slice(-4)}
+                              </span>
+                            ) : (
+                              <Badge variant="outline">Missing</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              disabled={!c.payout}
+                              onClick={() => {
+                                setSendShareCustomer(c);
+                                setEditPayout(c.payout ? { ...c.payout } : null);
+                              }}
+                            >
+                              <Send className="h-4 w-4 mr-1" /> Send share
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {view === "settings" && (
+            <div className="space-y-4 max-w-2xl">
+              <Card className="p-6 space-y-4">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <SettingsIcon className="h-4 w-4" /> Commission
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Percentage of restaurant revenue collected as commission.
+                  </p>
+                </div>
+                <div className="flex items-end gap-3 max-w-sm">
+                  <div className="flex-1 space-y-1">
+                    <Label>Commission %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={commissionPct}
+                      onChange={(e) => setCommissionPct(Number(e.target.value))}
+                    />
+                  </div>
+                  <Button onClick={() => toast.success("Commission updated")}>Save</Button>
+                </div>
+              </Card>
+
+              <Card className="p-6 space-y-4">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Building2 className="h-4 w-4" /> Business recipient account
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Where your commission from all restaurants will be sent.
+                  </p>
+                </div>
+                <AccountForm value={businessAccount} onChange={setBusinessAccount} />
+                <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
+                  <div className="flex-1 min-w-[200px]">
+                    <p className="text-sm text-muted-foreground">Commission available</p>
+                    <p className="text-2xl font-bold">${totalCommission.toLocaleString()}</p>
+                  </div>
+                  <Button onClick={() => setSendCommissionOpen(true)}>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send commission to business account
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
+        </main>
+
+        {/* View customer dialog */}
+        <Dialog open={!!viewCustomer} onOpenChange={(o) => !o && setViewCustomer(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{viewCustomer?.name}</DialogTitle>
+              <DialogDescription>Customer details</DialogDescription>
+            </DialogHeader>
+            {viewCustomer && (
+              <div className="space-y-2 text-sm">
+                <Row label="ID" value={viewCustomer.id} />
+                <Row label="Email" value={viewCustomer.email} />
+                <Row label="Phone" value={viewCustomer.phone} />
+                <Row label="Restaurant" value={viewCustomer.restaurant} />
+                <Row label="Joined" value={format(viewCustomer.joinedAt, "PPP")} />
+                <Row label="Total spent" value={`$${viewCustomer.totalSpent}`} />
+                <Row label="Pending share" value={`$${viewCustomer.pendingShare}`} />
+                <Row
+                  label="Payout"
+                  value={
+                    viewCustomer.payout
+                      ? `${viewCustomer.payout.provider} • ${viewCustomer.payout.accountNumber}`
+                      : "Not set"
+                  }
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Add payout dialog */}
+        <PayoutDialog
+          open={!!payoutCustomer}
+          title={`Add payout account for ${payoutCustomer?.name ?? ""}`}
+          initial={payoutCustomer?.payout}
+          onClose={() => setPayoutCustomer(null)}
+          onSave={handleAddPayout}
+        />
+
+        {/* Send share confirm dialog */}
+        <Dialog
+          open={!!sendShareCustomer}
+          onOpenChange={(o) => {
+            if (!o) {
+              setSendShareCustomer(null);
+              setEditPayout(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm payout</DialogTitle>
+              <DialogDescription>
+                Sending <b>${sendShareCustomer?.pendingShare}</b> to {sendShareCustomer?.name}.
+                Review and edit the account details if needed.
+              </DialogDescription>
+            </DialogHeader>
+            {editPayout && (
+              <AccountForm value={editPayout} onChange={setEditPayout} />
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setSendShareCustomer(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSendShare}>
+                <Send className="h-4 w-4 mr-2" /> Send now
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Send commission */}
+        <Dialog open={sendCommissionOpen} onOpenChange={setSendCommissionOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send commission</DialogTitle>
+              <DialogDescription>
+                Sending <b>${totalCommission}</b> to <b>{businessAccount.accountName}</b> (
+                {businessAccount.provider} • {businessAccount.accountNumber}).
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setSendCommissionOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSendCommission}>
+                <Send className="h-4 w-4 mr-2" /> Confirm send
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
@@ -671,7 +725,6 @@ function PayoutDialog({
     initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" }
   );
 
-  // Reset when reopened
   useEffect(() => {
     if (open) {
       setData(initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" });
