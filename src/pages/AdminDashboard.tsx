@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfDay, startOfWeek, startOfMonth, isAfter, isBefore, isEqual } from "date-fns";
 import {
@@ -672,8 +672,11 @@ function PayoutDialog({
   );
 
   // Reset when reopened
-  useMemo(() => {
-    setData(initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" });
+  useEffect(() => {
+    if (open) {
+      setData(initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
