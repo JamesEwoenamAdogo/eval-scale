@@ -332,7 +332,7 @@ export default function AdminDashboard() {
                           <TableCell className="font-medium">{c.name}</TableCell>
                           <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
                           <TableCell className="hidden md:table-cell">{format(c.joinedAt, "MMM d, yyyy")}</TableCell>
-                          <TableCell>${c.totalSpent}</TableCell>
+                          <TableCell>GH₵{c.totalSpent}</TableCell>
                           <TableCell>
                             {c.payout ? (
                               <Badge variant="secondary">{c.payout.type === "bank" ? "Bank" : "MoMo"}</Badge>
