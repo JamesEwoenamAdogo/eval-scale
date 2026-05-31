@@ -172,7 +172,7 @@ export default function AdminDashboard() {
   const handleSendShare = () => {
     if (!sendShareCustomer || !editPayout) return;
     toast.success(
-      `Sent $${sendShareCustomer.pendingShare} to ${editPayout.accountName} (${editPayout.accountNumber})`
+      `Sent GH₵${sendShareCustomer.pendingShare} to ${editPayout.accountName} (${editPayout.accountNumber})`
     );
     setSendShareCustomer(null);
     setEditPayout(null);
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
 
   const handleSendCommission = () => {
     toast.success(
-      `Sent $${totalCommission} commission to ${businessAccount.accountName}`
+      `Sent GH₵${totalCommission} commission to ${businessAccount.accountName}`
     );
     setSendCommissionOpen(false);
   };
@@ -254,13 +254,13 @@ export default function AdminDashboard() {
                 <MetricCard
                   icon={<DollarSign className="h-5 w-5" />}
                   label="Restaurant revenue"
-                  value={`$${totalRevenue.toLocaleString()}`}
+                  value={`GH₵${totalRevenue.toLocaleString()}`}
                   hint={`${filteredTxns.length} transactions`}
                 />
                 <MetricCard
                   icon={<Percent className="h-5 w-5" />}
                   label={`Your commission (${commissionPct}%)`}
-                  value={`$${totalCommission.toLocaleString()}`}
+                  value={`GH₵${totalCommission.toLocaleString()}`}
                   hint="From filtered period"
                 />
               </div>
@@ -480,8 +480,8 @@ export default function AdminDashboard() {
                 <Row label="Phone" value={viewCustomer.phone} />
                 <Row label="Restaurant" value={viewCustomer.restaurant} />
                 <Row label="Joined" value={format(viewCustomer.joinedAt, "PPP")} />
-                <Row label="Total spent" value={`$${viewCustomer.totalSpent}`} />
-                <Row label="Pending share" value={`$${viewCustomer.pendingShare}`} />
+                <Row label="Total spent" value={`GH₵${viewCustomer.totalSpent}`} />
+                <Row label="Pending share" value={`GH₵${viewCustomer.pendingShare}`} />
                 <Row
                   label="Payout"
                   value={
@@ -518,7 +518,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Confirm payout</DialogTitle>
               <DialogDescription>
-                Sending <b>${sendShareCustomer?.pendingShare}</b> to {sendShareCustomer?.name}.
+                Sending <b>GH₵{sendShareCustomer?.pendingShare}</b> to {sendShareCustomer?.name}.
                 Review and edit the account details if needed.
               </DialogDescription>
             </DialogHeader>
@@ -542,7 +542,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Send commission</DialogTitle>
               <DialogDescription>
-                Sending <b>${totalCommission}</b> to <b>{businessAccount.accountName}</b> (
+                Sending <b>GH₵{totalCommission}</b> to <b>{businessAccount.accountName}</b> (
                 {businessAccount.provider} • {businessAccount.accountNumber}).
               </DialogDescription>
             </DialogHeader>
