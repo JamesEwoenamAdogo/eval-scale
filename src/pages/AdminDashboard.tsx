@@ -91,6 +91,7 @@ import {
   type SalesAnalytics,
   type SignupMetric,
 } from "@/lib/adminApi";
+import axios from "axios";
 
 type FilterPreset = "today" | "week" | "month" | "custom";
 type View = "overview" | "customers" | "payouts" | "settings";
@@ -169,6 +170,7 @@ export default function AdminDashboard() {
   const [sendPayoutCustomer, setSendPayoutCustomer] = useState<RestaurantCustomer | null>(null);
   const [selectedPayouts, setSelectedPayouts] = useState<string[]>([]);
   const [sendCommissionOpen, setSendCommissionOpen] = useState(false);
+  const [commissionPercent,setCommissionPercent]= useState("")
 
   // Filtered metrics
   const filteredSignups = useMemo(
@@ -246,6 +248,33 @@ export default function AdminDashboard() {
     navigate("/login");
   };
 
+  
+
+const updateSuperAdmin = async () => {
+  try {
+    
+    const KEY = "admin_session";
+    const admin = JSON.parse(localStorage.getItem(KEY))
+    const response = await axios.put(
+      `https://munchezserver.onrender.com/api/v1/update-super-admin/${admin.email}`,
+      {commissionPercent: commissionPct},
+      {
+        withCredentials: true,
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.log(error);
+
+    return {
+      success: false,
+      message:
+        error?.response?.data?.message ||
+        error.message,
+    };
+  }
+};
   const handleSendPayouts = () => {
     if (!sendPayoutCustomer || selectedPayouts.length === 0) return;
 
@@ -517,7 +546,7 @@ export default function AdminDashboard() {
                       onChange={(e) => setCommissionPct(Number(e.target.value))}
                     />
                   </div>
-                  <Button onClick={() => toast.success("Commission updated")}>Save</Button>
+                  <Button onClick={() => {updateSuperAdmin();toast.success("Commission updated")}}>Save</Button>
                 </div>
               </Card>
 
