@@ -18,7 +18,6 @@ import {
   Shield,
   CalendarIcon,
   Send,
-  Plus,
   Eye,
   Building2,
   Settings as SettingsIcon,
@@ -57,6 +56,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -76,15 +76,24 @@ import {
 
 import { adminLogout, getAdminEmail } from "@/lib/adminAuth";
 import {
-  MOCK_CUSTOMERS,
-  MOCK_TRANSACTIONS,
-  getSignupsByMonth,
-  type Customer,
   type PayoutAccount,
 } from "@/lib/mockData";
+import {
+  formatApiDate,
+  getDashboardSummary,
+  getRestaurantSignups,
+  getRestaurants,
+  getSalesAnalytics,
+  mapRestaurantToCustomer,
+  type DashboardSummary,
+  type LedgerItem,
+  type RestaurantCustomer,
+  type SalesAnalytics,
+  type SignupMetric,
+} from "@/lib/adminApi";
 
 type FilterPreset = "today" | "week" | "month" | "custom";
-type View = "overview" | "customers" | "payments" | "settings";
+type View = "overview" | "customers" | "payouts" | "settings";
 
 function useDateRange() {
   const [preset, setPreset] = useState<FilterPreset>("month");
@@ -107,10 +116,20 @@ function inRange(d: Date, from: Date, to: Date) {
   return (isAfter(d, from) || isEqual(d, from)) && (isBefore(d, to) || isEqual(d, to));
 }
 
+function getLedgerKey(item: LedgerItem) {
+  return `${item.date}-${item.amount}`;
+}
+
+function totalLedger(items: LedgerItem[], paid: boolean) {
+  return items
+    .filter((item) => item.paid === paid)
+    .reduce((sum, item) => sum + item.amount, 0);
+}
+
 const navItems: { id: View; label: string; icon: React.ElementType }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "customers", label: "Customers", icon: Users },
-  { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "payouts", label: "Payouts", icon: CreditCard },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -132,55 +151,128 @@ export default function AdminDashboard() {
   });
 
   // Customers state (local copy so payouts can be added)
-  const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS);
+  const [customers, setCustomers] = useState<RestaurantCustomer[]>([]);
+  const [chartData, setChartData] = useState<SignupMetric[]>([]);
+  const [salesAnalytics, setSalesAnalytics] = useState<SalesAnalytics>({
+    totalSales: 0,
+    totalOrders: 0,
+  });
+  const [summary, setSummary] = useState<DashboardSummary>({
+    totalRestaurants: 0,
+    totalOrders: 0,
+    totalSales: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
   // Dialog states
-  const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
-  const [payoutCustomer, setPayoutCustomer] = useState<Customer | null>(null);
-  const [sendShareCustomer, setSendShareCustomer] = useState<Customer | null>(null);
-  const [editPayout, setEditPayout] = useState<PayoutAccount | null>(null);
+  const [viewCustomer, setViewCustomer] = useState<RestaurantCustomer | null>(null);
+  const [sendPayoutCustomer, setSendPayoutCustomer] = useState<RestaurantCustomer | null>(null);
+  const [selectedPayouts, setSelectedPayouts] = useState<string[]>([]);
   const [sendCommissionOpen, setSendCommissionOpen] = useState(false);
 
   // Filtered metrics
-  const filteredTxns = useMemo(
-    () => MOCK_TRANSACTIONS.filter((t) => inRange(t.date, range.from, range.to)),
-    [range]
-  );
   const filteredSignups = useMemo(
     () => customers.filter((c) => inRange(c.joinedAt, range.from, range.to)),
     [range, customers]
+    
   );
 
-  const totalRevenue = filteredTxns.reduce((s, t) => s + t.amount, 0);
+  const totalRevenue = salesAnalytics.totalSales;
   const totalCommission = Math.round((totalRevenue * commissionPct) / 100);
-  const chartData = getSignupsByMonth(12);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadBaseData() {
+      try {
+        setIsLoading(true);
+        const [signups, restaurants, dashboardSummary] = await Promise.all([
+          getRestaurantSignups(),
+          getRestaurants(),
+          getDashboardSummary(),
+        ]);
+
+        if (ignore) return;
+
+        setChartData(signups);
+        setCustomers(restaurants.map(mapRestaurantToCustomer));
+        setSummary(dashboardSummary);
+      } catch (error) {
+        if (!ignore) {
+          toast.error(error instanceof Error ? error.message : "Failed to load dashboard data");
+        }
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    }
+
+    loadBaseData();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadSales() {
+      try {
+        const analytics =
+          dr.preset === "custom"
+            ? await getSalesAnalytics({
+                startDate: formatApiDate(range.from),
+                endDate: formatApiDate(range.to),
+              })
+            : await getSalesAnalytics({ filter: dr.preset });
+
+        if (!ignore) setSalesAnalytics(analytics);
+      } catch (error) {
+        if (!ignore) {
+          toast.error(error instanceof Error ? error.message : "Failed to load sales analytics");
+        }
+      }
+    }
+
+    loadSales();
+
+    return () => {
+      ignore = true;
+    };
+  }, [dr.preset, range.from, range.to]);
 
   const handleLogout = () => {
     adminLogout();
     navigate("/login");
   };
 
-  const handleAddPayout = (data: PayoutAccount) => {
-    if (!payoutCustomer) return;
-    setCustomers((cs) =>
-      cs.map((c) => (c.id === payoutCustomer.id ? { ...c, payout: data } : c))
-    );
-    toast.success("Payout account saved");
-    setPayoutCustomer(null);
-  };
+  const handleSendPayouts = () => {
+    if (!sendPayoutCustomer || selectedPayouts.length === 0) return;
 
-  const handleSendShare = () => {
-    if (!sendShareCustomer || !editPayout) return;
-    toast.success(
-      `Sent GH₵${sendShareCustomer.pendingShare} to ${editPayout.accountName} (${editPayout.accountNumber})`
+    const selectedTotal = sendPayoutCustomer.payout
+      .filter((item) => selectedPayouts.includes(getLedgerKey(item)))
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    setCustomers((cs) =>
+      cs.map((customer) =>
+        customer._id === sendPayoutCustomer._id
+          ? {
+              ...customer,
+              payout: customer.payout.map((item) =>
+                selectedPayouts.includes(getLedgerKey(item)) ? { ...item, paid: true } : item
+              ),
+            }
+          : customer
+      )
     );
-    setSendShareCustomer(null);
-    setEditPayout(null);
+    toast.success(`Marked GHS ${selectedTotal.toLocaleString()} in payouts as paid`);
+    setSendPayoutCustomer(null);
+    setSelectedPayouts([]);
   };
 
   const handleSendCommission = () => {
     toast.success(
-      `Sent GH₵${totalCommission} commission to ${businessAccount.accountName}`
+      `Sent GHS ${totalCommission.toLocaleString()} commission to ${businessAccount.accountName}`
     );
     setSendCommissionOpen(false);
   };
@@ -247,15 +339,15 @@ export default function AdminDashboard() {
               <div className="grid gap-4 md:grid-cols-3">
                 <MetricCard
                   icon={<Users className="h-5 w-5" />}
-                  label="New signups"
-                  value={filteredSignups.length.toString()}
-                  hint={`In ${dr.preset === "custom" ? "selected range" : dr.preset}`}
+                  label="Restaurants"
+                  value={summary.totalRestaurants.toString()}
+                  hint={isLoading ? "Loading..." : `${filteredSignups.length} in selected period`}
                 />
                 <MetricCard
                   icon={<DollarSign className="h-5 w-5" />}
                   label="Restaurant revenue"
                   value={`GH₵${totalRevenue.toLocaleString()}`}
-                  hint={`${filteredTxns.length} transactions`}
+                  hint={`${salesAnalytics.totalOrders.toLocaleString()} orders`}
                 />
                 <MetricCard
                   icon={<Percent className="h-5 w-5" />}
@@ -269,7 +361,9 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="font-semibold">Client signups per month</h3>
-                    <p className="text-sm text-muted-foreground">Last 12 months</p>
+                    <p className="text-sm text-muted-foreground">
+                      {summary.totalOrders.toLocaleString()} total orders, GH₵{summary.totalSales.toLocaleString()} total sales
+                    </p>
                   </div>
                 </div>
                 <div className="h-72">
@@ -321,32 +415,25 @@ export default function AdminDashboard() {
                         <TableHead>Name</TableHead>
                         <TableHead className="hidden md:table-cell">Restaurant</TableHead>
                         <TableHead className="hidden md:table-cell">Joined</TableHead>
-                        <TableHead>Spent</TableHead>
                         <TableHead>Payout</TableHead>
+                        <TableHead>Commission</TableHead>
+                        <TableHead>TotalSales</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {customers.map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell className="font-medium">{c.name}</TableCell>
-                          <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
+                        <TableRow key={c._id}>
+                          <TableCell className="font-medium">{c.businessName}</TableCell>
+                          <TableCell className="hidden md:table-cell">{c.businessName}</TableCell>
                           <TableCell className="hidden md:table-cell">{format(c.joinedAt, "MMM d, yyyy")}</TableCell>
-                          <TableCell>GH₵{c.totalSpent}</TableCell>
-                          <TableCell>
-                            {c.payout ? (
-                              <Badge variant="secondary">{c.payout.type === "bank" ? "Bank" : "MoMo"}</Badge>
-                            ) : (
-                              <Badge variant="outline">Not set</Badge>
-                            )}
-                          </TableCell>
+                          <TableCell>GHS {totalLedger(c.payout, false).toLocaleString()}</TableCell>
+                          <TableCell>GHS {totalLedger(c.commission, false).toLocaleString()}</TableCell>
+                          <TableCell>GHS {c.totalSales.toLocaleString()}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               <Button size="sm" variant="ghost" onClick={() => setViewCustomer(c)}>
                                 <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => setPayoutCustomer(c)}>
-                                <Plus className="h-4 w-4 mr-1" /> Payout
                               </Button>
                             </div>
                           </TableCell>
@@ -359,13 +446,13 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {view === "payments" && (
+          {view === "payouts" && (
             <div className="space-y-4">
               <Card className="p-4 md:p-6">
                 <div className="mb-4">
-                  <h3 className="font-semibold">Customer shares</h3>
+                  <h3 className="font-semibold">Payouts</h3>
                   <p className="text-sm text-muted-foreground">
-                    Send each customer their share of restaurant revenue.
+                    Review unpaid payout entries and mark selected items as paid.
                   </p>
                 </div>
                 <div className="overflow-x-auto">
@@ -374,36 +461,29 @@ export default function AdminDashboard() {
                       <TableRow>
                         <TableHead>Customer</TableHead>
                         <TableHead className="hidden md:table-cell">Restaurant</TableHead>
-                        <TableHead>Pending share</TableHead>
-                        <TableHead>Account</TableHead>
+                        <TableHead>Pending Payout</TableHead>
+                        <TableHead>Completed Payouts</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {customers.map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell className="font-medium">{c.name}</TableCell>
-                          <TableCell className="hidden md:table-cell">{c.restaurant}</TableCell>
-                          <TableCell className="font-semibold">${c.pendingShare}</TableCell>
-                          <TableCell>
-                            {c.payout ? (
-                              <span className="text-xs text-muted-foreground">
-                                {c.payout.provider} • {c.payout.accountNumber.slice(-4)}
-                              </span>
-                            ) : (
-                              <Badge variant="outline">Missing</Badge>
-                            )}
-                          </TableCell>
+                        <TableRow key={c._id}>
+                          <TableCell className="font-medium">{c.businessName}</TableCell>
+                          <TableCell className="hidden md:table-cell">{c.businessName}</TableCell>
+                          <TableCell className="font-semibold">GHS {totalLedger(c.payout, false).toLocaleString()}</TableCell>
+                          <TableCell>GHS {totalLedger(c.payout, true).toLocaleString()}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"
-                              disabled={!c.payout}
+                              disabled={c.payout.filter((item) => !item.paid).length === 0}
                               onClick={() => {
-                                setSendShareCustomer(c);
-                                setEditPayout(c.payout ? { ...c.payout } : null);
+                                const unpaid = c.payout.filter((item) => !item.paid);
+                                setSendPayoutCustomer(c);
+                                setSelectedPayouts(unpaid.map(getLedgerKey));
                               }}
                             >
-                              <Send className="h-4 w-4 mr-1" /> Send share
+                              <Send className="h-4 w-4 mr-1" /> Confirm payouts
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -468,69 +548,90 @@ export default function AdminDashboard() {
 
         {/* View customer dialog */}
         <Dialog open={!!viewCustomer} onOpenChange={(o) => !o && setViewCustomer(null)}>
-          <DialogContent>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{viewCustomer?.name}</DialogTitle>
+              <DialogTitle>{viewCustomer?.businessName}</DialogTitle>
               <DialogDescription>Customer details</DialogDescription>
             </DialogHeader>
             {viewCustomer && (
-              <div className="space-y-2 text-sm">
-                <Row label="ID" value={viewCustomer.id} />
-                <Row label="Email" value={viewCustomer.email} />
-                <Row label="Phone" value={viewCustomer.phone} />
-                <Row label="Restaurant" value={viewCustomer.restaurant} />
-                <Row label="Joined" value={format(viewCustomer.joinedAt, "PPP")} />
-                <Row label="Total spent" value={`GH₵${viewCustomer.totalSpent}`} />
-                <Row label="Pending share" value={`GH₵${viewCustomer.pendingShare}`} />
-                <Row
-                  label="Payout"
-                  value={
-                    viewCustomer.payout
-                      ? `${viewCustomer.payout.provider} • ${viewCustomer.payout.accountNumber}`
-                      : "Not set"
-                  }
-                />
+              <div className="space-y-5 text-sm">
+                <div className="space-y-2">
+                  <Row label="ID" value={viewCustomer._id} />
+                  <Row label="Business name" value={viewCustomer.businessName} />
+                  <Row label="Slug" value={viewCustomer.slug || "Not set"} />
+                  <Row label="Phone" value={viewCustomer.phone || "Not set"} />
+                  <Row label="Logo" value={viewCustomer.logo || "Not set"} />
+                  <Row label="Address" value={viewCustomer.address || "Not set"} />
+                  <Row label="Role" value={viewCustomer.role || "Not set"} />
+                  <Row label="Created" value={format(viewCustomer.joinedAt, "PPP")} />
+                  <Row label="Updated" value={format(new Date(viewCustomer.updatedAt), "PPP")} />
+                  <Row label="TotalSales" value={`GHS ${viewCustomer.totalSales.toLocaleString()}`} />
+                  <Row label="Commission percent" value={`${viewCustomer.commissionPercent}%`} />
+                  <Row label="Pending Payout" value={`GHS ${totalLedger(viewCustomer.payout, false).toLocaleString()}`} />
+                </div>
+
+                <LedgerSection title="Pending Payouts" items={viewCustomer.payout.filter((item) => !item.paid)} />
+                <LedgerSection title="Completed Payouts" items={viewCustomer.payout.filter((item) => item.paid)} />
+                <LedgerSection title="Unpaid Commission" items={viewCustomer.commission.filter((item) => !item.paid)} />
+                <LedgerSection title="Paid Commission" items={viewCustomer.commission.filter((item) => item.paid)} />
               </div>
             )}
           </DialogContent>
         </Dialog>
 
-        {/* Add payout dialog */}
-        <PayoutDialog
-          open={!!payoutCustomer}
-          title={`Add payout account for ${payoutCustomer?.name ?? ""}`}
-          initial={payoutCustomer?.payout}
-          onClose={() => setPayoutCustomer(null)}
-          onSave={handleAddPayout}
-        />
-
-        {/* Send share confirm dialog */}
+        {/* Confirm selected payouts */}
         <Dialog
-          open={!!sendShareCustomer}
+          open={!!sendPayoutCustomer}
           onOpenChange={(o) => {
             if (!o) {
-              setSendShareCustomer(null);
-              setEditPayout(null);
+              setSendPayoutCustomer(null);
+              setSelectedPayouts([]);
             }
           }}
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Confirm payout</DialogTitle>
+              <DialogTitle>Confirm payouts</DialogTitle>
               <DialogDescription>
-                Sending <b>GH₵{sendShareCustomer?.pendingShare}</b> to {sendShareCustomer?.name}.
-                Review and edit the account details if needed.
+                Select the unpaid payout items to mark as paid for {sendPayoutCustomer?.businessName}.
               </DialogDescription>
             </DialogHeader>
-            {editPayout && (
-              <AccountForm value={editPayout} onChange={setEditPayout} />
-            )}
+            <div className="space-y-3">
+              {sendPayoutCustomer?.payout.filter((item) => !item.paid).map((item) => {
+                const key = getLedgerKey(item);
+                return (
+                  <label key={key} className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={selectedPayouts.includes(key)}
+                        onCheckedChange={(checked) => {
+                          setSelectedPayouts((current) =>
+                            checked ? [...current, key] : current.filter((selected) => selected !== key)
+                          );
+                        }}
+                      />
+                      <span>{item.date}</span>
+                    </div>
+                    <span className="font-semibold">GHS {item.amount.toLocaleString()}</span>
+                  </label>
+                );
+              })}
+              <div className="flex justify-between border-t pt-3 font-semibold">
+                <span>Selected total</span>
+                <span>
+                  GHS {sendPayoutCustomer?.payout
+                    .filter((item) => selectedPayouts.includes(getLedgerKey(item)))
+                    .reduce((sum, item) => sum + item.amount, 0)
+                    .toLocaleString() ?? "0"}
+                </span>
+              </div>
+            </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setSendShareCustomer(null)}>
+              <Button variant="ghost" onClick={() => setSendPayoutCustomer(null)}>
                 Cancel
               </Button>
-              <Button onClick={handleSendShare}>
-                <Send className="h-4 w-4 mr-2" /> Send now
+              <Button disabled={selectedPayouts.length === 0} onClick={handleSendPayouts}>
+                <Send className="h-4 w-4 mr-2" /> Confirm selected
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -566,6 +667,33 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-4 py-1 border-b last:border-0">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+function LedgerSection({ title, items }: { title: string; items: LedgerItem[] }) {
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold">{title}</h4>
+        <span className="text-sm font-semibold">GHS {total.toLocaleString()}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          No items
+        </p>
+      ) : (
+        <div className="rounded-md border">
+          {items.map((item) => (
+            <div key={getLedgerKey(item)} className="flex justify-between gap-4 border-b p-3 last:border-0">
+              <span>{item.date}</span>
+              <span className="font-medium">GHS {item.amount.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -708,53 +836,8 @@ function AccountForm({
   );
 }
 
-function PayoutDialog({
-  open,
-  title,
-  initial,
-  onClose,
-  onSave,
-}: {
-  open: boolean;
-  title: string;
-  initial?: PayoutAccount;
-  onClose: () => void;
-  onSave: (a: PayoutAccount) => void;
-}) {
-  const [data, setData] = useState<PayoutAccount>(
-    initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" }
-  );
 
-  useEffect(() => {
-    if (open) {
-      setData(initial ?? { type: "mobile_money", provider: "", accountName: "", accountNumber: "" });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Choose mobile money or bank account.</DialogDescription>
-        </DialogHeader>
-        <AccountForm value={data} onChange={setData} />
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={() => {
-              if (!data.provider || !data.accountNumber || !data.accountName) {
-                toast.error("Please fill all fields");
-                return;
-              }
-              onSave(data);
-            }}
-          >
-            Save account
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+
+
+
