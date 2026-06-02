@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+
 import { Building2, Send, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -26,14 +26,17 @@ export default function Settings() {
 
   const updateSuperAdmin = async () => {
     try {
-      const KEY = "admin_session";
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem("admin_session");
       if (!raw) return;
       const admin = JSON.parse(raw);
-      await axios.put(
+      await fetch(
         `https://munchezserver.onrender.com/api/v1/update-super-admin/${admin.email}`,
-        { commissionPercent: commissionPct },
-        { withCredentials: true }
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ commissionPercent: commissionPct }),
+        }
       );
     } catch (error) {
       console.log(error);
